@@ -1,0 +1,16 @@
+[
+  { "type": "click", "selector": "#settingsBtn" },
+  { "type": "click", "selector": "#resetBtn" },
+  { "type": "click", "selector": "#resetBtn" },
+  { "type": "click", "selector": "#settingsBtn" },
+  { "type": "click", "selector": "#importBtn" },
+  {
+    "type": "fill",
+    "selector": "#importText",
+    "value": "{\"app\":\"cor\",\"savedAt\":4102444800000,\"techs\":[\"t1_metal\"],\"lines\":{\"ironPlate\":1,\"ironRod\":2},\"items\":{\"ironIngot\":1000,\"concrete\":1000},\"settings\":{\"sound\":false,\"particles\":false}}"
+  },
+  { "type": "click", "selector": "#loadImportBtn" },
+  { "type": "click", "selector": "[data-mobile-view=\"side\"]" },
+  { "type": "click", "selector": "[data-side-tab=\"buildings\"]" },
+  { "type": "assert", "selector": ".b-name", "property": "text", "equals": "Конструктор" }
+]

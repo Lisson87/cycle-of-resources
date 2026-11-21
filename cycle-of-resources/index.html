@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#080d12">
+  <title>Цикл ресурсов — idle-завод</title>
+  <meta name="description" content="Idle-игра о руднике, который вырос в орбитальный завод: ручная добыча, автоматические линии, дерево из 30 технологий и офлайн-прогресс до 8 часов.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpath d='M20 2 35 11v18L20 38 5 29V11z' fill='%230c131b' stroke='%23e8a34a' stroke-width='2'/%3E%3Ccircle cx='20' cy='20' r='5' fill='%23e8a34a'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <canvas id="ambient" aria-hidden="true"></canvas>
+
+  <div class="app" id="app">
+    <header class="hud">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 40 40" role="img">
+            <path d="M20 2.5 35 11.2v17.6L20 37.5 5 28.8V11.2z" fill="none" stroke="currentColor" stroke-width="2"/>
+            <path d="M20 9.5 28.5 14.5v9L20 28.5 11.5 23.5v-9z" fill="currentColor" opacity=".16"/>
+            <circle cx="20" cy="19" r="4.2" fill="currentColor"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <span class="brand-title">Цикл ресурсов</span>
+          <span class="brand-sub">орбитальный завод · смена <span id="shiftNumber">01</span></span>
+        </div>
+      </div>
+
+      <div class="hud-meters">
+        <div class="meter" title="Кристаллы за исследования и достижения">
+          <span class="meter-icon" aria-hidden="true">💠</span>
+          <div class="meter-copy">
+            <span class="meter-label">Кристаллы</span>
+            <strong class="num" id="crystalCount">0</strong>
+          </div>
+        </div>
+        <button class="boost-btn" id="boostBtn" type="button" title="Ускорить всё производство вдвое на 5 минут">
+          <span class="boost-icon" aria-hidden="true">⚡</span>
+          <span class="boost-copy">
+            <span class="meter-label">Ускорение ×2</span>
+            <strong id="boostLabel">5 кристаллов</strong>
+          </span>
+        </button>
+        <button class="boost-btn click-boost-btn" id="clickBoostBtn" type="button" title="Увеличить ручную добычу в 10 раз на 2 минуты">
+          <span class="boost-icon" aria-hidden="true">⛏️</span>
+          <span class="boost-copy">
+            <span class="meter-label">Клик ×10 · 2 мин</span>
+            <strong id="clickBoostLabel">3 кристалла</strong>
+          </span>
+        </button>
+      </div>
+
+      <div class="hud-actions">
+        <div class="save-state" id="saveState" title="Автосохранение каждые 10 секунд">
+          <span class="dot" aria-hidden="true"></span>
+          <span id="saveText">Сохранено</span>
+        </div>
+        <button class="icon-btn" id="saveBtn" type="button" aria-label="Сохранить игру" title="Сохранить">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h11l3 3v15H5z"/><path d="M8 3v6h8V3M8 21v-7h8v7"/></svg>
+        </button>
+        <button class="icon-btn" id="settingsBtn" type="button" aria-label="Открыть настройки" title="Настройки">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel production-panel" id="productionPanel" data-view="tree" aria-label="Дерево производства">
+        <div class="panel-head production-head">
+          <div>
+            <span class="eyebrow">Производственная цепочка</span>
+            <h2>Дерево ресурсов</h2>
+          </div>
+          <span class="count-badge" id="prodNodeCount" title="Открыто предметов">0</span>
+        </div>
+        <div class="prod-toolbar">
+          <div class="prod-search" id="prodSearchWrap">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg>
+            <input id="prodSearch" type="search" placeholder="Найти предмет…" autocomplete="off" aria-label="Поиск предмета в дереве" aria-expanded="false" aria-controls="prodSearchResults">
+            <button class="clear-search" id="clearProdSearch" type="button" hidden aria-label="Очистить поиск">×</button>
+            <div class="search-results" id="prodSearchResults" role="listbox" aria-label="Найденные предметы" hidden></div>
+          </div>
+          <div class="zoom-controls prod-zoom" role="group" aria-label="Масштаб дерева производства">
+            <button class="mini-btn" type="button" data-prod-zoom="out" aria-label="Уменьшить">−</button>
+            <button class="mini-btn" type="button" data-prod-zoom="fit" aria-label="Показать всё">Вписать</button>
+            <button class="mini-btn" type="button" data-prod-zoom="in" aria-label="Увеличить">+</button>
+          </div>
+          <div class="prod-legend" aria-label="Обозначения дерева">
+            <span><i class="legend-dot raw"></i>сырьё</span>
+            <span><i class="legend-dot made"></i>производство</span>
+            <span><i class="legend-dot deficit"></i>дефицит</span>
+          </div>
+        </div>
+        <div class="prod-viewport" id="prodViewport">
+          <div class="prod-space" id="prodSpace">
+            <div class="prod-world" id="prodWorld">
+              <svg class="prod-edges" id="prodEdges" aria-hidden="true"></svg>
+              <div class="prod-nodes" id="prodNodes"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel side-panel" id="sidePanel" data-view="side" aria-label="Свойства и развитие завода">
+        <div class="side-tabs" id="sideTabs" role="tablist" aria-label="Разделы">
+          <button class="tab active" type="button" role="tab" aria-selected="true" data-side-tab="properties">
+            <span aria-hidden="true">◈</span>Свойства<span class="tab-badge" data-badge-tab="properties" hidden></span>
+          </button>
+          <button class="tab" type="button" role="tab" aria-selected="false" data-side-tab="tree">
+            <span aria-hidden="true">🌌</span>Карта<span class="tab-badge" data-badge-tab="map" hidden></span>
+          </button>
+          <button class="tab" type="button" role="tab" aria-selected="false" data-side-tab="buildings">
+            <span aria-hidden="true">🏭</span>Здания<span class="tab-badge" data-badge-tab="buildings" hidden></span>
+          </button>
+          <button class="tab" type="button" role="tab" aria-selected="false" data-side-tab="recipes">
+            <span aria-hidden="true">📜</span>Рецепты<span class="tab-badge" data-badge-tab="recipes" hidden></span>
+          </button>
+          <button class="tab" type="button" role="tab" aria-selected="false" data-side-tab="stats">
+            <span aria-hidden="true">📊</span>Статистика<span class="tab-badge" data-badge-tab="stats" hidden></span>
+          </button>
+        </div>
+        <div class="side-content" id="sideContent">
+          <div class="properties-view" id="propertiesView">
+            <div class="overview" id="overviewView">
+              <section class="hero">
+                <div class="hero-top">
+                  <span class="eyebrow">Ручная добыча</span>
+                  <span class="hero-status" id="heroStatus">Смена 01 · 00:00</span>
+                </div>
+                <h1>Запустите цикл</h1>
+                <p class="hero-lead">Бейте по жилам, плавьте первые слитки вручную — и постройте завод, который продолжит работать без вас.</p>
+                <div class="gather-grid" id="gatherGrid"></div>
+                <div class="hero-foot">
+                  <span class="pulse-dot" aria-hidden="true"></span>
+                  <span id="heroHint">Открыто ручное сырьё: железо, медь, известняк, уголь.</span>
+                </div>
+              </section>
+
+              <div class="overview-grid">
+                <section class="card next-tech-card" id="nextTechCard" aria-label="Следующая технология"></section>
+                <section class="card flow-card" id="flowCard" aria-label="Ключевые потоки склада"></section>
+              </div>
+
+              <section class="card checklist-card" id="checklistCard" aria-label="Первый запуск завода"></section>
+            </div>
+
+            <div class="inspector" id="inspectorView" hidden></div>
+          </div>
+          <div class="other-side-view" id="otherSideView" hidden></div>
+        </div>
+      </section>
+    </main>
+
+    <nav class="mobile-nav" id="mobileNav" aria-label="Разделы игры">
+      <button class="mobile-tab active" type="button" data-mobile-view="tree" aria-label="Дерево производства">
+        <span aria-hidden="true">◇</span><span>Дерево</span>
+      </button>
+      <button class="mobile-tab" type="button" data-mobile-view="side" aria-label="Панель свойств и развития">
+        <span aria-hidden="true">▤</span><span>Панель</span><span class="mobile-badge" data-badge-tab="mobile" hidden></span>
+      </button>
+    </nav>
+  </div>
+
+  <div class="toasts" id="toasts" aria-live="polite" aria-atomic="false"></div>
+
+  <!-- ── Дерево технологий ─────────────────────────────── -->
+  <dialog class="modal tech-dialog" id="techDialog" aria-labelledby="techDialogTitle">
+    <div class="tech-shell">
+      <header class="modal-head">
+        <div>
+          <span class="eyebrow">Дерево развития</span>
+          <h2 id="techDialogTitle">Технологии</h2>
+        </div>
+        <div class="tech-head-progress">
+          <span id="techProgressLabel">0 / 31</span>
+          <div class="progress"><i id="techProgressBar"></i></div>
+        </div>
+        <button class="icon-btn modal-close" type="button" data-dialog-close aria-label="Закрыть дерево технологий">×</button>
+      </header>
+
+      <div class="tech-body">
+        <div class="tree-stage">
+          <div class="tree-toolbar">
+            <div class="zoom-controls" role="group" aria-label="Масштаб дерева">
+              <button class="mini-btn" type="button" data-zoom="out" aria-label="Уменьшить">−</button>
+              <button class="mini-btn" type="button" data-zoom="fit" aria-label="Показать всё">Вписать</button>
+              <button class="mini-btn" type="button" data-zoom="in" aria-label="Увеличить">+</button>
+            </div>
+            <div class="tree-legend" aria-label="Обозначения">
+              <span><i class="legend-dot done"></i>Изучено</span>
+              <span><i class="legend-dot available"></i>Доступно</span>
+              <span><i class="legend-dot open"></i>Нужны ресурсы</span>
+              <span><i class="legend-dot locked"></i>Закрыто</span>
+            </div>
+          </div>
+          <div class="tree-viewport" id="treeViewport">
+            <div class="tree-space" id="treeSpace">
+              <div class="tree-world" id="treeWorld">
+                <svg class="tree-edges" id="treeEdges" aria-hidden="true"></svg>
+                <div class="tree-nodes" id="treeNodes"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <aside class="tech-detail" id="techDetail" aria-live="polite"></aside>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- ── Офлайн-прогресс ───────────────────────────────── -->
+  <dialog class="modal" id="offlineDialog" aria-labelledby="offlineTitle">
+    <div class="modal-card offline-card">
+      <span class="offline-icon" aria-hidden="true">🌙</span>
+      <span class="eyebrow">Смена завершена</span>
+      <h2 id="offlineTitle">Завод работал без вас</h2>
+      <p class="modal-lead" id="offlineText">Пока вас не было, линии продолжали выпуск.</p>
+      <div class="offline-gains" id="offlineGains"></div>
+      <p class="offline-note" id="offlineNote"></p>
+      <button class="btn primary wide" type="button" id="offlineClose">Забрать</button>
+    </div>
+  </dialog>
+
+  <!-- ── Победа: ракета ────────────────────────────────── -->
+  <dialog class="modal" id="victoryDialog" aria-labelledby="victoryTitle">
+    <div class="modal-card victory-card">
+      <span class="victory-icon" aria-hidden="true">🚀</span>
+      <span class="eyebrow">Орбитальный проект</span>
+      <h2 id="victoryTitle">Ракета собрана</h2>
+      <p class="modal-lead">Топливо, двигатели, варп-привод и сингулярности сошлись в одной конструкции. Завод выполнил главную задачу — и может продолжать работать.</p>
+      <div class="victory-stats" id="victoryStats"></div>
+      <button class="btn primary wide" type="button" id="victoryClose">Продолжить</button>
+    </div>
+  </dialog>
+
+  <!-- ── Настройки ─────────────────────────────────────── -->
+  <dialog class="modal" id="settingsDialog" aria-labelledby="settingsTitle">
+    <div class="modal-card settings-card">
+      <header class="modal-head compact">
+        <div>
+          <span class="eyebrow">Система</span>
+          <h2 id="settingsTitle">Настройки</h2>
+        </div>
+        <button class="icon-btn modal-close" type="button" data-dialog-close aria-label="Закрыть настройки">×</button>
+      </header>
+
+      <div class="settings-list">
+        <label class="switch-row">
+          <span><strong>Звук</strong><small>Клики, постройка, исследования</small></span>
+          <input type="checkbox" id="settingSound" checked>
+          <span class="switch" aria-hidden="true"></span>
+        </label>
+        <label class="switch-row">
+          <span><strong>Фоновая пыль</strong><small>Частицы руды на фоне</small></span>
+          <input type="checkbox" id="settingParticles" checked>
+          <span class="switch" aria-hidden="true"></span>
+        </label>
+      </div>
+
+      <div class="save-block">
+        <div class="save-block-head">
+          <span>Сохранение</span>
+          <span class="save-info" id="saveInfo">—</span>
+        </div>
+        <p class="hint">Игра сохраняется в localStorage каждые 10 секунд и при закрытии вкладки.</p>
+        <div class="button-row">
+          <button class="btn" type="button" id="saveNowBtn">Сохранить сейчас</button>
+          <button class="btn" type="button" id="exportBtn">Экспорт сейва</button>
+          <button class="btn" type="button" id="importBtn">Импорт сейва</button>
+        </div>
+      </div>
+
+      <div class="danger-block">
+        <div>
+          <strong>Сбросить прогресс</strong>
+          <p class="hint">Склад, здания и технологии будут удалены без возможности отмены.</p>
+        </div>
+        <button class="btn danger" type="button" id="resetBtn">Сбросить</button>
+      </div>
+
+      <footer class="modal-foot">
+        <span>Цикл ресурсов · v1.0</span>
+        <span id="settingsStats">—</span>
+      </footer>
+    </div>
+  </dialog>
+
+  <!-- ── Экспорт ───────────────────────────────────────── -->
+  <dialog class="modal" id="exportDialog" aria-labelledby="exportTitle">
+    <div class="modal-card">
+      <header class="modal-head compact">
+        <div>
+          <span class="eyebrow">Резервная копия</span>
+          <h2 id="exportTitle">Экспорт сейва</h2>
+        </div>
+        <button class="icon-btn modal-close" type="button" data-dialog-close aria-label="Закрыть экспорт">×</button>
+      </header>
+      <p class="modal-lead">Скопируйте JSON или сохраните его в файл. Импорт восстановит завод на другом устройстве.</p>
+      <textarea class="code-area" id="exportText" readonly spellcheck="false" aria-label="JSON сохранения"></textarea>
+      <div class="button-row">
+        <button class="btn primary" type="button" id="copyExportBtn">Скопировать</button>
+        <button class="btn" type="button" id="downloadExportBtn">Скачать .json</button>
+      </div>
+      <p class="hint">Сейв содержит только прогресс, настройки и статистику. Никаких персональных данных.</p>
+    </div>
+  </dialog>
+
+  <!-- ── Импорт ────────────────────────────────────────── -->
+  <dialog class="modal" id="importDialog" aria-labelledby="importTitle">
+    <div class="modal-card">
+      <header class="modal-head compact">
+        <div>
+          <span class="eyebrow">Восстановление</span>
+          <h2 id="importTitle">Импорт сейва</h2>
+        </div>
+        <button class="icon-btn modal-close" type="button" data-dialog-close aria-label="Закрыть импорт">×</button>
+      </header>
+      <p class="modal-lead">Вставьте JSON или выберите файл. Текущий прогресс будет заменён.</p>
+      <textarea class="code-area" id="importText" spellcheck="false" placeholder='{"app":"cor","version":1,…}' aria-label="JSON для импорта"></textarea>
+      <input class="file-input" type="file" id="importFile" accept=".json,.txt,application/json,text/plain" aria-label="Выбрать файл сейва">
+      <p class="form-error" id="importError" role="alert" hidden></p>
+      <div class="button-row">
+        <button class="btn primary" type="button" id="loadImportBtn">Загрузить сейв</button>
+        <button class="btn" type="button" id="clearImportBtn">Очистить</button>
+      </div>
+    </div>
+  </dialog>
+
+  <script src="js/util.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="data/items.js"></script>
+  <script src="data/buildings.js"></script>
+  <script src="data/recipes.js"></script>
+  <script src="data/techTree.js"></script>
+  <script src="data/achievements.js"></script>
+  <script src="js/engine.js"></script>
+  <script src="js/productionTree.js"></script>
+  <script src="js/techGraph.js"></script>
+  <script src="js/ambient.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
